@@ -1,0 +1,82 @@
+services:
+  recipient:
+    container_name: migrator_recipient_postgres_container
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "${DB_NAME:-recipient}"
+      POSTGRES_USER: "${DB_USER:-postgres}"
+      POSTGRES_PASSWORD: "${DB_PASS:-postgres}"
+    ports:
+      - "${DB_PORT:-5440}:5432"
+    restart: always
+    volumes:
+      - postgres:/data/postgres
+  
+  donor:
+    container_name: migrator_donor_postgres_container
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "${DB_NAME:-donor}"
+      POSTGRES_USER: "${DB_USER:-postgres}"
+      POSTGRES_PASSWORD: "${DB_PASS:-postgres}"
+    ports:
+      - "${DB_PORT:-5441}:5432"
+    restart: always
+    volumes:
+      - postgres:/data/postgres
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: '${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}'
+      PGADMIN_DEFAULT_PASSWORD: '${PGADMIN_DEFAULT_PASSWORD:-admin}'
+    ports:
+      - "${PGADMIN_PORT:-5056}:80"
+    depends_on:
+      - database
+    links:
+      - database
+    restart: always
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+  
+  zookeeper:
+    container_name: go_auth_users_grpc_zookeeper_container
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "${KAFKA_PORT:-22181}:2181"
+
+  kafka:
+    container_name: go_auth_users_grpc_kafka_container
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    ports:
+      - "${KAFKA_PORT:-29092}:29092"
+
+  kafka-ui:
+    container_name: go_auth_users_grpc_kafka-ui_container
+    image: provectuslabs/kafka-ui
+    ports:
+      - "9090:8080"
+    restart: always
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+
+volumes:
+    postgres:
+    pgadmin:
