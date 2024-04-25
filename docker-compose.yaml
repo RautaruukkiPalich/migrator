@@ -26,23 +26,19 @@ services:
       - postgres:/data/postgres
 
   pgadmin:
-    container_name: pgadmin_container
+    container_name: migrator_pgadmin_container
     image: dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: '${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}'
       PGADMIN_DEFAULT_PASSWORD: '${PGADMIN_DEFAULT_PASSWORD:-admin}'
     ports:
       - "${PGADMIN_PORT:-5056}:80"
-    depends_on:
-      - database
-    links:
-      - database
     restart: always
     volumes:
       - pgadmin:/var/lib/pgadmin
   
   zookeeper:
-    container_name: go_auth_users_grpc_zookeeper_container
+    container_name: migrator_zookeeper_container
     image: confluentinc/cp-zookeeper:latest
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -51,7 +47,7 @@ services:
       - "${KAFKA_PORT:-22181}:2181"
 
   kafka:
-    container_name: go_auth_users_grpc_kafka_container
+    container_name: migrator_kafka_container
     image: confluentinc/cp-kafka:latest
     depends_on:
       - zookeeper
@@ -65,7 +61,7 @@ services:
       - "${KAFKA_PORT:-29092}:29092"
 
   kafka-ui:
-    container_name: go_auth_users_grpc_kafka-ui_container
+    container_name: migrator_kafka-ui_container
     image: provectuslabs/kafka-ui
     ports:
       - "9090:8080"
