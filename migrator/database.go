@@ -75,16 +75,15 @@ func (m *migrator) MigrateFromDB(table string) error {
 			limit,
 			offset,
 		)
-
 		if err != nil {
 			return fmt.Errorf("select from db err: %w", err)
 		}
 
 		err = m.SendMessages(table, rows)
+		rows.Close()
 		if err != nil {
 			return fmt.Errorf("err send to kafka: %w", err)
-		}
-		
+		}		
 	}
 
 	return nil
