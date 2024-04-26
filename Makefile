@@ -1,8 +1,13 @@
 run:
-	go run cmd/main.go
+	go run cmd/app/main.go --config=./config/config.yaml
 
 docker:
 	docker-compose up -d
 
-lint:
-	golangci-lint run ./...
+makemigrations:
+	migrate create -ext sql -dir migrations $(name)
+
+migrate:
+	go run ./cmd/migrator --config=./config/config.yaml
+
+test: migrate run

@@ -1,7 +1,10 @@
 package migrator
 
 import (
-	"database/sql"
+	"strings"
+
+	"github.com/segmentio/kafka-go"
+	"github.com/jmoiron/sqlx"
 )
 
 type Driver string
@@ -27,89 +30,55 @@ type KafkaConfig struct {
 }
 
 type migrator struct {
-	donor *sql.DB
-	recipient *sql.DB
-	broker *broker
+	donor  *sqlx.DB
+	broker *kafka.Writer
 }
 
 type Migrator interface {
-	Migrate()
+	Migrate(table string) error
+	Close()
 }
 
-func Migrate(
-	donorConfig, recipientConfig DBConfig,
-	kafkaConfig KafkaConfig,
-) error {
-	m, err := newMigrator(&donorConfig, &recipientConfig, &kafkaConfig)
-	if err != nil {
-		return err
-	}
-	m.Start()
-	defer m.Stop()
-
-	return nil
-}
-
-func newMigrator(
-	donorConfig, recipientConfig *DBConfig,
+func New(
+	donorConfig *DBConfig,
 	kafkaConfig *KafkaConfig,
-) (*migrator, error) {
+) (Migrator, error) {
 	donor, err := newDatabase(donorConfig)
 	if err != nil {
 		return nil, err
 	}
-	recipient, err := newDatabase(recipientConfig)
-	if err != nil {
-		return nil, err
-	}
-	broker, err := newBroker(kafkaConfig)
-	if err != nil {
-		return nil, err
-	}
+	broker := newBroker(kafkaConfig)
 
 	return &migrator{
-		donor: donor,
-		recipient: recipient,
+		donor:  donor,
 		broker: broker,
 	}, nil
 }
 
-func (m *migrator) Start() {
-	m.broker.Run()
+func (m *migrator) Migrate(table string) error {
+	if err := checkTable(table); err != nil {
+		return err
+	}
+	return m.MigrateFromDB(table)
 }
 
-func (m *migrator) Stop() {
-	m.broker.Stop()
+func (m *migrator) Close() {
+	m.broker.Close()
 	m.donor.Close()
-	m.recipient.Close()
 }
 
-func (m *migrator) ReadFromDB() error {
-	tx, err := m.donor.Begin()
-	if err != nil {
-		return err
+func checkTable(table string) error {
+	if len(strings.Split(table, " ")) != 1 {
+		return ErrInvalidTablename
 	}
-	defer tx.Rollback()
-
-	tx.Commit()
-	return nil
-}
-
-func (m *migrator) InsertToDB() error {
-	tx, err := m.recipient.Begin()
-	if err != nil {
-		return err
+	if len(strings.Split(table, ";")) != 1 {
+		return ErrInvalidTablename
 	}
-	defer tx.Rollback()
-
-	tx.Commit()
+	if len(strings.Split(table, ",")) != 1 {
+		return ErrInvalidTablename
+	}
+	if strings.Contains(table, "drop") {
+		return ErrInvalidTablename
+	}
 	return nil
-}
-
-func (m *migrator) SendToKafka() {
-	m.broker.SendMessages()
-}
-
-func (m *migrator) GetFromKafka() {
-	m.broker.GetMessages()
 }

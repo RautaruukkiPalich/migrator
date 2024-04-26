@@ -1,17 +1,4 @@
 services:
-  recipient:
-    container_name: migrator_recipient_postgres_container
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: "${DB_NAME:-recipient}"
-      POSTGRES_USER: "${DB_USER:-postgres}"
-      POSTGRES_PASSWORD: "${DB_PASS:-postgres}"
-    ports:
-      - "${DB_PORT:-5440}:5432"
-    restart: always
-    volumes:
-      - postgres:/data/postgres
-  
   donor:
     container_name: migrator_donor_postgres_container
     image: postgres:16-alpine
@@ -56,7 +43,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     ports:
       - "${KAFKA_PORT:-29092}:29092"
 

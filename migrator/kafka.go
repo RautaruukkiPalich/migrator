@@ -3,90 +3,63 @@ package migrator
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/segmentio/kafka-go"
 )
 
 const (
-	timeout = time.Millisecond * 1
 	topic = "migrator"
 )
 
-type broker struct {
-	producer *kafka.Writer
-	consumer *kafka.Reader
-	ticker *time.Ticker
-	done chan struct{}
-}
-
-func newBroker(cfg *KafkaConfig) (*broker, error) {
-	w := &kafka.Writer{
-		Addr:     kafka.TCP(fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)), //"localhost:29092")
-		Balancer: &kafka.LeastBytes{},
-	}
-
-	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)},
-		Topic:     topic,
-		MaxBytes:  10e6, // 10MB
-	})
-
-	ticker := time.NewTicker(timeout)
-	done := make(chan struct{})
-
-	return &broker{
-		producer: w,
-		consumer: r,
-		ticker: ticker,
-		done: done,
-	}, nil
-}
-
-func (b *broker) Run() {
-	
-	ctx := context.Background()
-	
-	go func() {
-		for {
-			select {
-			case <- b.done:
-				return
-			case <- b.ticker.C:
-				m, err := b.consumer.ReadMessage(ctx)
-				if err != nil {
-					fmt.Printf("error reading message %v", err)
-				}
-				fmt.Println(m)
-			}
-		}
-	}()
-}
-
-func (b *broker) Stop(){
-	close(b.done)
-	defer b.ticker.Stop()
-	defer b.producer.Close()
-	defer b.consumer.Close()
-}
-
-func (b *broker) SendMessages() {
-	data := "message"
-	err := b.producer.WriteMessages(
-		context.Background(),
-		kafka.Message{
-			Topic: topic,
-			Value: []byte(data),
-		})
-	if err != nil {
-		panic(err) 
-	}
-}
-
-func (b *broker) GetMessages() {
-	m, err := b.consumer.ReadMessage(context.Background())
+func newBroker(cfg *KafkaConfig) *kafka.Writer {
+	// hint for fix: panic: [3] Unknown Topic Or Partition: the request is for a topic or partition that does not exist on this broker
+	conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:29092", topic, 0)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(m)
+	// close the connection because we won't be using it
+	conn.Close()
+
+	w := &kafka.Writer{
+		Addr:     kafka.TCP(fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)), //"localhost:29092")
+		Topic:    topic,
+		Balancer: &kafka.LeastBytes{},
+	}
+
+	return w
+}
+
+func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
+	sqlrows := rows
+	data := m.getMsgsFromRows(table, sqlrows)
+
+	err := m.broker.WriteMessages(
+		context.Background(),
+		data...,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *migrator) getMsgsFromRows(table string, rows *sqlx.Rows) []kafka.Message {
+	var data []kafka.Message
+	for rows.Next() {
+		row, _ := rows.SliceScan()
+		msg := kafka.Message{
+			Headers: []kafka.Header{
+				{
+					Key:   "table",
+					Value: []byte(table),
+				},
+			},
+			WriterData: row,
+		}
+		data = append(data, msg)
+	}
+
+	return data
 }
