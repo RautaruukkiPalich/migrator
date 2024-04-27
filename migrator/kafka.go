@@ -3,6 +3,7 @@ package migrator
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/segmentio/kafka-go"
@@ -32,9 +33,12 @@ func newBroker(cfg *KafkaConfig) *kafka.Writer {
 
 func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
 	sqlrows := rows
-	data := m.getMsgsFromRows(table, sqlrows)
+	data, err := m.getMsgsFromRows(table, sqlrows)
+	if err != nil {
+		return err
+	}
 
-	err := m.broker.WriteMessages(
+	err = m.broker.WriteMessages(
 		context.Background(),
 		data...,
 	)
@@ -45,21 +49,38 @@ func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
 	return nil
 }
 
-func (m *migrator) getMsgsFromRows(table string, rows *sqlx.Rows) []kafka.Message {
-	var data []kafka.Message
+func (m *migrator) getMsgsFromRows(table string, rows *sqlx.Rows) ([]kafka.Message, error) {
+	headers, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	var cursor int64 = 0
+	data := make([]kafka.Message, batchSize)
+
 	for rows.Next() {
 		row, _ := rows.SliceScan()
+
+		// закинемданные в мапу, которую и отправим, чтобы не было проблем с именами столбцов 
+		dict := make(map[string]any)
+		for idx, col := range headers {
+			dict[col] = row[idx]
+		} 
+
 		msg := kafka.Message{
+			// возможно, стоит название таблицы записать в key, а не в header
 			Headers: []kafka.Header{
 				{
 					Key:   "table",
 					Value: []byte(table),
 				},
 			},
-			WriterData: row,
+			// возможно, стоит данные сериализовать и отправить в Value
+			WriterData: dict,
 		}
-		data = append(data, msg)
+		data[cursor] = msg
+		atomic.AddInt64(&cursor, 1)
 	}
 
-	return data
+	return data[:cursor], nil
 }
