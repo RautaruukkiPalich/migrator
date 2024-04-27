@@ -56,8 +56,11 @@ func newDatabase(cfg *DBConfig) (*sqlx.DB, error) {
 
 func (m *migrator) MigrateFromDB(table string) error {
 
+	tx := m.donor.MustBegin()
+	defer tx.Rollback()
+
 	var count []any
-	err := m.donor.Select(&count, fmt.Sprintf("SELECT COUNT(*) FROM %s", table))
+	err := tx.Select(&count, fmt.Sprintf("SELECT COUNT(*) FROM %s", table))
 	if err != nil {
 		return err
 	}
@@ -68,24 +71,25 @@ func (m *migrator) MigrateFromDB(table string) error {
 		limit := batchSize
 		offset := i*batchSize
 
-		rows, err := m.donor.Queryx(
-			fmt.Sprintf(
-				`SELECT * FROM %s LIMIT $1 OFFSET $2`, table,
-			),
+		rows, err := tx.Queryx(
+			fmt.Sprintf(`SELECT * FROM %s LIMIT $1 OFFSET $2`, table),
 			limit,
 			offset,
 		)
 		if err != nil {
 			return fmt.Errorf("select from db err: %w", err)
 		}
+		defer rows.Close()
 
 		err = m.SendMessages(table, rows)
-		rows.Close()
+
 		if err != nil {
 			return fmt.Errorf("err send to kafka: %w", err)
-		}		
+		}
+			
 	}
 
+	tx.Commit()	
 	return nil
 }
 
