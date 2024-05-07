@@ -57,7 +57,12 @@ func main() {
 	}
 	defer m.Close()
 
-	dbs := []string{"donor", "postgres;drop table users", "postgres drop table users"}
+	dbs := []string{
+		"donor",
+		"postgres;drop table users",
+		"postgres drop table users",
+		"table",
+	}
 
 	for _, db := range dbs {
 		err = m.Migrate(db)
