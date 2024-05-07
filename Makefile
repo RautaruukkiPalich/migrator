@@ -8,6 +8,6 @@ makemigrations:
 	migrate create -ext sql -dir migrations $(name)
 
 migrate:
-	go run ./cmd/migrator --config=./config/config.yaml
+	go run ./cmd/migrate --config=./config/config.yaml
 
 test: migrate run

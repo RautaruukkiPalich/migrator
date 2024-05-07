@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -53,26 +53,22 @@ func main() {
 
 	m, err := migrator.New(dbcfg, kafkacfg)
 	if err != nil {
-		fmt.Printf("Failed to create migrator: %v\n", err)
+		log.Fatalf("Failed to create migrator: %v\n", err)
 	}
 	defer m.Close()
 
-	err = m.Migrate("donor")
-	if err != nil {
-		fmt.Printf("Failed to migrate: %v\n", err)
+	dbs := []string{"donor", "postgres;drop table users", "postgres drop table users"}
+
+	for _, db := range dbs {
+		err = m.Migrate(db)
+		if err != nil {
+			log.Printf("Failed to migrate db `%s`: %v\n", db, err)
+		} else {
+			log.Printf("Suscessfully migrated `%s`", db)
+		}
 	}
 
-	err = m.Migrate("postgres;drop table users")
-	if err != nil {
-		fmt.Printf("Failed to migrate: %v\n", err)
-	}
-
-	err = m.Migrate("postgres drop table users")
-	if err != nil {
-		fmt.Printf("Failed to migrate: %v\n", err)
-	}
-
-	fmt.Println("and its gone")
+	log.Print("and its gone")
 }
 
 func MustLoadConfig() *Config {

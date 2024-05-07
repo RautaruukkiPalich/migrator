@@ -15,20 +15,6 @@ const (
 	MySQL    Driver = "mysql"
 )
 
-type DBConfig struct {
-	Driver   Driver
-	Host     string
-	Port     int
-	Username string
-	Password string
-	DBName   string
-}
-
-type KafkaConfig struct {
-	Host string
-	Port int
-}
-
 type migrator struct {
 	donor  *sqlx.DB
 	broker *kafka.Writer

@@ -53,9 +53,7 @@ func newDatabase(cfg *DBConfig) (*sqlx.DB, error) {
 	return db, nil
 }
 
-
 func (m *migrator) MigrateFromDB(table string) error {
-
 	tx := m.donor.MustBegin()
 	defer tx.Rollback()
 
@@ -79,17 +77,14 @@ func (m *migrator) MigrateFromDB(table string) error {
 		if err != nil {
 			return fmt.Errorf("select from db err: %w", err)
 		}
-		defer rows.Close()
-
+		
 		err = m.SendMessages(table, rows)
 
 		if err != nil {
 			return fmt.Errorf("err send to kafka: %w", err)
-		}
-			
+		}	
 	}
 
-	tx.Commit()	
+	tx.Commit()
 	return nil
 }
-

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/jmoiron/sqlx"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -14,8 +16,9 @@ const (
 )
 
 func newBroker(cfg *KafkaConfig) *kafka.Writer {
+
 	// hint for fix: panic: [3] Unknown Topic Or Partition: the request is for a topic or partition that does not exist on this broker
-	conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:29092", topic, 0)
+	conn, err := kafka.DialLeader(context.Background(), "tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port), topic, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -23,7 +26,7 @@ func newBroker(cfg *KafkaConfig) *kafka.Writer {
 	conn.Close()
 
 	w := &kafka.Writer{
-		Addr:     kafka.TCP(fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)), //"localhost:29092")
+		Addr:     kafka.TCP(fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)), //"localhost:29092"
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 	}
@@ -32,8 +35,9 @@ func newBroker(cfg *KafkaConfig) *kafka.Writer {
 }
 
 func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
-	sqlrows := rows
-	data, err := m.getMsgsFromRows(table, sqlrows)
+	defer rows.Close()
+
+	data, err := m.getMsgsFromRows(table, rows)
 	if err != nil {
 		return err
 	}
@@ -43,43 +47,60 @@ func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
 		data...,
 	)
 	if err != nil {
-		return err
+		return ErrFailedToSendKafkaMessages
 	}
 
 	return nil
 }
 
 func (m *migrator) getMsgsFromRows(table string, rows *sqlx.Rows) ([]kafka.Message, error) {
-	headers, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
 
-	var cursor int64 = 0
+	var (
+		cursor int64 = 0
+		key    []byte
+		value  []byte
+		err    error
+	)
+
 	data := make([]kafka.Message, batchSize)
 
 	for rows.Next() {
-		row, _ := rows.SliceScan()
+		switch table {
+		case "donor":
+			type DBUser struct {
+				ID        int64     `json:"id"`
+				Username  string    `json:"username"`
+				CreatedAt time.Time `json:"created_at"`
+			}
 
-		// закинемданные в мапу, которую и отправим, чтобы не было проблем с именами столбцов 
-		dict := make(map[string]any)
-		for idx, col := range headers {
-			dict[col] = row[idx]
-		} 
+			user := DBUser{}
+			rows.Scan(&user.ID, &user.Username, &user.CreatedAt)
+
+			value, err = jsoniter.Marshal(user)
+			if err != nil {
+				return nil, ErrFailedToMarshal
+			}
+
+			key = []byte(fmt.Sprintf("%s_%d", table, user.ID))
+
+			//или не зная структуры, использовать рефлект?
+		default:
+			//что то тут для других таблиц
+		}
 
 		msg := kafka.Message{
-			// возможно, стоит название таблицы записать в key, а не в header
 			Headers: []kafka.Header{
 				{
 					Key:   "table",
 					Value: []byte(table),
 				},
 			},
-			// возможно, стоит данные сериализовать и отправить в Value
-			WriterData: dict,
+			Key:   key,
+			Value: value,
 		}
 		data[cursor] = msg
 		atomic.AddInt64(&cursor, 1)
+
 	}
 
 	return data[:cursor], nil
