@@ -40,4 +40,21 @@ if err != nil {
 }
 ```
 
-### DO NOT FORGET EDIT ./migrator/kafka/getMsgsFromRows . Add your structs to switch/case
+### DO NOT FORGET EDIT `./migrator/kafka/getMsgsFromRows`. Add your structs to switch/case
+
+### MAKEFILE
+
+#### up docker 
+```
+make docker
+```
+
+#### migrate test data
+```
+make migrate
+```
+
+#### run
+```
+make run
+```
