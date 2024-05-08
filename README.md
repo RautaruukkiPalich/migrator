@@ -1,5 +1,5 @@
 ### Create config
-
+ 
 ```
 dbcfg := &migrator.DBConfig{
 	Driver:   migrator.Driver(cfg.Database.Driver),
