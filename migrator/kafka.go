@@ -4,21 +4,23 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/rautaruukkipalich/migrator/config"
 	"github.com/segmentio/kafka-go"
 )
 
-const (
-	topic = "migrator"
-)
-
-func newBroker(cfg *KafkaConfig) *kafka.Writer {
+func newBroker(cfg *config.KafkaConfig) *kafka.Writer {
 
 	// hint for fix: panic: [3] Unknown Topic Or Partition: the request is for a topic or partition that does not exist on this broker
-	conn, err := kafka.DialLeader(context.Background(), "tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port), topic, 0)
+	conn, err := kafka.DialLeader(
+		context.Background(),
+		"tcp",
+		fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Topic,
+		0,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -27,7 +29,7 @@ func newBroker(cfg *KafkaConfig) *kafka.Writer {
 
 	w := &kafka.Writer{
 		Addr:     kafka.TCP(fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)), //"localhost:29092"
-		Topic:    topic,
+		Topic:    Topic,
 		Balancer: &kafka.LeastBytes{},
 	}
 
@@ -37,14 +39,14 @@ func newBroker(cfg *KafkaConfig) *kafka.Writer {
 func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
 	defer rows.Close()
 
-	data, err := m.getMsgsFromRows(table, rows)
+	msgs, err := m.getMsgsFromRows(table, rows)
 	if err != nil {
 		return err
 	}
 
 	err = m.broker.WriteMessages(
 		context.Background(),
-		data...,
+		msgs...,
 	)
 	if err != nil {
 		return ErrFailedToSendKafkaMessages
@@ -55,53 +57,40 @@ func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
 
 func (m *migrator) getMsgsFromRows(table string, rows *sqlx.Rows) ([]kafka.Message, error) {
 
-	var (
-		cursor int64 = 0
-		key    []byte
-		value  []byte
-		err    error
-	)
+	var cursor int32
 
-	data := make([]kafka.Message, batchSize)
+	msgs := make([]kafka.Message, m.batchSize)
 
 	for rows.Next() {
-		switch table {
-		case "donor":
-			type DBUser struct {
-				ID        int64     `json:"id"`
-				Username  string    `json:"username"`
-				CreatedAt time.Time `json:"created_at"`
-			}
+		rowMap := make(map[string]any)
 
-			user := DBUser{}
-			rows.Scan(&user.ID, &user.Username, &user.CreatedAt)
-
-			value, err = jsoniter.Marshal(user)
-			if err != nil {
-				return nil, ErrFailedToMarshal
-			}
-
-			key = []byte(fmt.Sprintf("%s_%d", table, user.ID))
-
-			//или не зная структуры, использовать рефлект?
-		default:
-			//что то тут для других таблиц
+		if err := rows.MapScan(rowMap); err != nil {
+			return nil, err
 		}
 
-		msg := kafka.Message{
-			Headers: []kafka.Header{
-				{
-					Key:   "table",
-					Value: []byte(table),
-				},
-			},
-			Key:   key,
-			Value: value,
+		value, err := jsoniter.Marshal(rowMap)
+		if err != nil {
+			return nil, ErrFailedToMarshal
 		}
-		data[cursor] = msg
-		atomic.AddInt64(&cursor, 1)
 
+		key := []byte(fmt.Sprintf("%s_%d", table, rowMap["id"]))
+
+		msgs[cursor] = createMsg(table, key, value)
+		atomic.AddInt32(&cursor, 1)
 	}
 
-	return data[:cursor], nil
+	return msgs[:cursor], nil
+}
+
+func createMsg(table string, key, value []byte) kafka.Message {
+	return kafka.Message{
+		Headers: []kafka.Header{
+			{
+				Key:   "table",
+				Value: []byte(table),
+			},
+		},
+		Key:   key,
+		Value: value,
+	}
 }

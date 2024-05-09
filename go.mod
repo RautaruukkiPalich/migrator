@@ -1,6 +1,6 @@
 module github.com/rautaruukkipalich/migrator
 
-go 1.21.0
+go 1.21
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.17.1

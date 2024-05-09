@@ -4,87 +4,74 @@ import (
 	"fmt"
 	"math"
 
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
+	"github.com/rautaruukkipalich/migrator/config"
+	"github.com/rautaruukkipalich/migrator/pkg/dbhelper"
 )
 
-const (
-	batchSize = 10000
-)
+func newDatabase(cfg *config.DatabaseConfig) (*sqlx.DB, error) {
 
-func newDatabase(cfg *DBConfig) (*sqlx.DB, error) {
-
-	var path string
-	var driver string
-
-	switch cfg.Driver {
-	case Postgres:
-		path = fmt.Sprintf(
-			"%s://%s:%s@%s:%d/%s?sslmode=disable",
-			cfg.Driver,
-			cfg.Username,
-			cfg.Password,
-			cfg.Host,
-			cfg.Port,
-			cfg.DBName,
-		)
-		driver = "postgres"
-	// case MySQL:
-	// 	driver = "mysql"
-	// case SQLite:
-	// 	driver = "sqlite"
-	default:
-
-	}
-	if driver == "" {
-		return nil, ErrInvalidDriver
-	}
-
-	db, err := sqlx.Open(driver, path)
+	dbURI, driver, err := dbhelper.GetURIAndDriverFromCfg(cfg)
 	if err != nil {
-		return nil, ErrFailedToCreateConnection
+		return nil, err
 	}
-
-	if err := db.Ping(); err != nil {
-		return nil, ErrFailedToConnectDB
-	}
-
-	return db, nil
+	
+	return dbhelper.GetDBConnection(dbURI, driver)
 }
 
 func (m *migrator) MigrateFromDB(table string) error {
-	tx := m.donor.MustBegin()
+	tx := m.database.MustBegin()
 	defer tx.Rollback()
 
-	var count []any
-	err := tx.Select(&count, fmt.Sprintf("SELECT COUNT(*) FROM %s", table))
+	rowCount, err := m.getRowsCount(table, tx) 
 	if err != nil {
 		return err
 	}
 
-	times := int(math.Ceil(float64(count[0].(int64)) / batchSize))
+	iterations := m.getIterationsRange(rowCount)
 
-	for i := 0; i < times; i++ {
-		limit := batchSize
-		offset := i*batchSize
+	stmt, err := tx.Preparex(
+		fmt.Sprintf(`SELECT * FROM %s LIMIT $1 OFFSET $2`, table),
+	)
+	if err != nil {
+		return err
+	}
 
-		rows, err := tx.Queryx(
-			fmt.Sprintf(`SELECT * FROM %s LIMIT $1 OFFSET $2`, table),
-			limit,
-			offset,
-		)
+	for i := 0; i < iterations; i++ {
+		rows, err := m.getRows(table, stmt, i)
 		if err != nil {
-			return fmt.Errorf("select from db err: %w", err)
+			return err
 		}
-		
-		err = m.SendMessages(table, rows)
 
-		if err != nil {
-			return fmt.Errorf("err send to kafka: %w", err)
-		}	
+		if err = m.SendMessages(table, rows); err != nil {
+			return err
+		}
 	}
 
 	tx.Commit()
 	return nil
+}
+	
+func (m *migrator) getRowsCount(table string, tx *sqlx.Tx) (int, error) {
+
+	var count []any
+	err := tx.Select(&count, fmt.Sprintf("SELECT COUNT(*) FROM %s", table))
+	if err != nil {
+		return 0, err
+	}
+	return int(count[0].(int64)), nil
+}
+
+
+func (m *migrator) getRows(table string, stmt *sqlx.Stmt, iter int) (*sqlx.Rows, error) {
+	// tablename validate in m.Migrate func
+	return stmt.Queryx(m.batchSize, iter * m.batchSize)
+}
+
+func (m *migrator) getIterationsRange(count int) int {	
+	return int(
+		math.Ceil(
+			float64(count) / float64(m.batchSize),
+		),
+	)
 }
