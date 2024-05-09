@@ -10,4 +10,7 @@ makemigrations:
 migrate:
 	go run ./cmd/migrate --config=./config/config.yaml
 
+lint:
+	golangci-lint run ./...
+
 test: migrate run

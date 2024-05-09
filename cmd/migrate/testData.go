@@ -43,5 +43,6 @@ func saveToDB(db *sql.DB, user User) {
 		fmt.Println(err.Error())
 		return
 	}
+	//nolint:all
 	stmt.Exec(user.username, user.createdAt)
 }

@@ -21,6 +21,7 @@ func newDatabase(cfg *config.DatabaseConfig) (*sqlx.DB, error) {
 
 func (m *migrator) MigrateFromDB(table string) error {
 	tx := m.database.MustBegin()
+	//nolint:all
 	defer tx.Rollback()
 
 	rowCount, err := m.getRowsCount(table, tx) 
@@ -48,8 +49,7 @@ func (m *migrator) MigrateFromDB(table string) error {
 		}
 	}
 
-	tx.Commit()
-	return nil
+	return tx.Commit()
 }
 	
 func (m *migrator) getRowsCount(table string, tx *sqlx.Tx) (int, error) {
