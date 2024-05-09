@@ -65,7 +65,7 @@ func (m *migrator) getMsgsFromRows(table string, rows *sqlx.Rows) ([]kafka.Messa
 		rowMap := make(map[string]any)
 
 		if err := rows.MapScan(rowMap); err != nil {
-			return nil, err
+			return nil, ErrParseRow
 		}
 
 		value, err := jsoniter.Marshal(rowMap)
