@@ -25,7 +25,7 @@ func main() {
 		if err != nil {
 			log.Printf("Failed to migrate table `%s`: %v\n", table, err)
 		} else {
-			log.Printf("Suscessfully migrated table `%s`", table)
+			log.Printf("Successful migrated table `%s`", table)
 		}
 	}
 
