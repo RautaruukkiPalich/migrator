@@ -1,0 +1,1 @@
+SELECT * FROM %s LIMIT $1 OFFSET $2;

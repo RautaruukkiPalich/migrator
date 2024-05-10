@@ -3,11 +3,21 @@ package migrator
 import (
 	"fmt"
 	"math"
+	_ "embed"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rautaruukkipalich/migrator/config"
 	"github.com/rautaruukkipalich/migrator/pkg/dbhelper"
 )
+
+var (
+	//go:embed queries/select_rows.sql
+	selectRows string
+
+	//go:embed queries/select_count_rows.sql
+	selectCountRows string
+)
+
 
 func newDatabase(cfg *config.DatabaseConfig) (*sqlx.DB, error) {
 
@@ -31,9 +41,7 @@ func (m *migrator) MigrateFromDB(table string) error {
 
 	iterations := m.getIterationsRange(rowCount)
 
-	stmt, err := tx.Preparex(
-		fmt.Sprintf(`SELECT * FROM %s LIMIT $1 OFFSET $2`, table),
-	)
+	stmt, err := tx.Preparex(fmt.Sprintf(selectRows, table))
 	if err != nil {
 		return err
 	}
@@ -55,7 +63,7 @@ func (m *migrator) MigrateFromDB(table string) error {
 func (m *migrator) getRowsCount(table string, tx *sqlx.Tx) (int, error) {
 
 	var count []any
-	err := tx.Select(&count, fmt.Sprintf("SELECT COUNT(*) FROM %s", table))
+	err := tx.Select(&count, fmt.Sprintf(selectCountRows, table))
 	if err != nil {
 		return 0, err
 	}
