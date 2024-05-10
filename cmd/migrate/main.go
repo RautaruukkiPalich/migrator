@@ -11,6 +11,10 @@ import (
 	"github.com/rautaruukkipalich/migrator/pkg/dbhelper"
 )
 
+const (
+	defaultTestCountRows = 25000
+)
+
 func main() {
 	cfg := confighelper.MustLoadConfig()
 
@@ -36,7 +40,7 @@ func main() {
 	}
 
 	if cfg.TestCountRows == 0 {
-		cfg.TestCountRows = 25000
+		cfg.TestCountRows = defaultTestCountRows
 	}
 
 	err = FillDB(driver, dbURI, cfg.TestCountRows)
