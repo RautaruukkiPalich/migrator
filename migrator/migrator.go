@@ -55,7 +55,8 @@ func (m *migrator) Close() {
 }
 
 func validateTable(table string) error {
-	if strings.Contains(table, "drop") ||
+	if len(strings.Split(table, " ")) != 1 ||
+		strings.Contains(table, "drop ") ||
 		strings.Contains(table, " ") ||
 		strings.Contains(table, ";") ||
 		strings.Contains(table, ",") ||
