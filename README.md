@@ -40,6 +40,7 @@ defer m.Close()
 ```
 
 ### Run migrate loop
+```
 for _, table := range cfg.Tables {
 		err = m.Migrate(table)
 		if err != nil {
@@ -48,6 +49,7 @@ for _, table := range cfg.Tables {
 			log.Printf("Successful migrated table `%s`", table)
 		}
 	}
+```
 
 ### MAKEFILE
 
