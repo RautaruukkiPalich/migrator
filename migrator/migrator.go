@@ -11,7 +11,7 @@ import (
 type migrator struct {
 	database  *sqlx.DB
 	broker    *kafka.Writer
-	batchSize int
+	batchSize int32
 }
 
 type Migrator interface {
@@ -22,7 +22,7 @@ type Migrator interface {
 func New(
 	cfgDB *config.DatabaseConfig,
 	cfgKafka *config.KafkaConfig,
-	batchSize int,
+	batchSize int32,
 ) (Migrator, error) {
 
 	database, err := newDatabase(cfgDB)
@@ -46,7 +46,7 @@ func (m *migrator) Migrate(table string) error {
 	if err := validateTable(table); err != nil {
 		return err
 	}
-	return m.MigrateFromDB(table)
+	return m.MigrateTable(table)
 }
 
 func (m *migrator) Close() {

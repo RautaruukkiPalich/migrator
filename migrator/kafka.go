@@ -36,15 +36,48 @@ func newBroker(cfg *config.KafkaConfig) *kafka.Writer {
 	return w
 }
 
-func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
+func (m *migrator) SendToBroker(table string, rows *sqlx.Rows) error {
+
 	defer rows.Close()
 
-	msgs, err := m.getMsgsFromRows(table, rows)
-	if err != nil {
-		return err
+	var cursor int32
+	var batch int32
+
+	msgs := make([]kafka.Message, m.batchSize)
+
+	for rows.Next() {
+		rowMap := make(map[string]any)
+
+		if err := rows.MapScan(rowMap); err != nil {
+			return ErrParseRow
+		}
+
+		value, err := jsoniter.Marshal(rowMap)
+		if err != nil {
+			return ErrFailedToMarshal
+		}
+
+		key := []byte(fmt.Sprintf("%s_%d", table, batch * int32(m.batchSize) + cursor))
+
+		msgs[cursor] = createMsg(table, key, value)
+		atomic.AddInt32(&cursor, 1)
+
+		if cursor == m.batchSize {
+			atomic.AddInt32(&batch, 1)
+			if err = m.SendMessages(msgs); err != nil {
+				return err
+			}
+
+			msgs = make([]kafka.Message, m.batchSize)
+			atomic.StoreInt32(&cursor, 0)
+		}
 	}
 
-	err = m.broker.WriteMessages(
+	return m.SendMessages(msgs[:cursor])
+}
+
+func (m *migrator) SendMessages(msgs []kafka.Message) error {
+	err := m.broker.WriteMessages(
 		context.Background(),
 		msgs...,
 	)
@@ -53,33 +86,6 @@ func (m *migrator) SendMessages(table string, rows *sqlx.Rows) error {
 	}
 
 	return nil
-}
-
-func (m *migrator) getMsgsFromRows(table string, rows *sqlx.Rows) ([]kafka.Message, error) {
-
-	var cursor int32
-
-	msgs := make([]kafka.Message, m.batchSize)
-
-	for rows.Next() {
-		rowMap := make(map[string]any)
-
-		if err := rows.MapScan(rowMap); err != nil {
-			return nil, ErrParseRow
-		}
-
-		value, err := jsoniter.Marshal(rowMap)
-		if err != nil {
-			return nil, ErrFailedToMarshal
-		}
-
-		key := []byte(fmt.Sprintf("%s_%d", table, rowMap["id"]))
-
-		msgs[cursor] = createMsg(table, key, value)
-		atomic.AddInt32(&cursor, 1)
-	}
-
-	return msgs[:cursor], nil
 }
 
 func createMsg(table string, key, value []byte) kafka.Message {

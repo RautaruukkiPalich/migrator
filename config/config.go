@@ -11,7 +11,7 @@ const (
 type Config struct {
 	Database      DatabaseConfig `yaml:"database" env_required:"true"`
 	Kafka         KafkaConfig    `yaml:"kafka" env_required:"true"`
-	BatchSize     int            `yaml:"batch_size" env_required:"false"`
+	BatchSize     int32            `yaml:"batch_size" env_required:"false"`
 	Tables        []string       `yaml:"tables" env_required:"false"`
 	MigrationPath string         `yaml:"migration_path" env_required:"false"`
 	TestCountRows int            `yaml:"test_count_rows" env_required:"false"`
