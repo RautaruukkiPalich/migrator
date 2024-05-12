@@ -1,20 +1,13 @@
 ### Add config.yaml to ./config path
- 
-
 
 ```
 database: 
   driver: "postgres"
-  user: "postgres"
-  password: "postgres"
-  host: "localhost"
-  port: 5432
-  db_name: "postgres"            //donor db name
+  db_uri: "postgres://postgres:postgres@localhost:5441/donor?sslmode=disable"
 kafka:
-  host: "localhost"
-  port: 29092
+  broker_uri: "localhost:29092"
+  topic: "migrator"
 batch_size: 10000
-tables: ["test", "data", "donor", "users", "drop table users", "users;drop table users; users"]
 ```
 
 For tests add to config file:
@@ -28,27 +21,35 @@ test_count_rows: 25000           //count of test rows
 ```
 cfg := confighelper.MustLoadConfig()  //load config
 
-m, err := migrator.New(
-		&cfg.Database,
-		&cfg.Kafka, 
-		cfg.BatchSize,
-	)
+m, err := migrator.New(cfg)
 if err != nil {
 	log.Fatalf("Failed to create migrator: %v\n", err)
 }
 defer m.Close()
 ```
 
-### Run migrate loop
+### Edit querySelect.sql file in `./resourses` directory
+#### for example:
 ```
-for _, table := range cfg.Tables {
-		err = m.Migrate(table)
-		if err != nil {
-			log.Printf("Failed to migrate table `%s`: %v\n", table, err)
-		} else {
-			log.Printf("Successful migrated table `%s`", table)
-		}
-	}
+SELECT * FROM donor;
+```
+
+#### or
+```
+SELECT Orders.OrderID, Customers.CustomerName, Orders.OrderDate
+FROM Orders
+INNER JOIN Customers ON Orders.CustomerID=Customers.CustomerID;
+```
+
+### Run migrate
+```
+err = m.Migrate(tablename)
+if err != nil {
+	log.Printf("Failed to migrate table `%s`: %v\n", table, err)
+} else {
+	log.Printf("Successful migrated table `%s`", table)
+}
+
 ```
 
 ### MAKEFILE
@@ -66,11 +67,6 @@ make migrate
 #### run
 ```
 make run
-```
-
-#### test
-```
-make test
 ```
 
 #### linter

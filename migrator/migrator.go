@@ -1,17 +1,28 @@
 package migrator
 
 import (
-	"strings"
+	"context"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/rautaruukkipalich/migrator/config"
-	"github.com/segmentio/kafka-go"
+	kafka_broker "github.com/rautaruukkipalich/migrator/migrator/broker/kafka"
+	"github.com/rautaruukkipalich/migrator/migrator/database"
+	sql_database "github.com/rautaruukkipalich/migrator/migrator/database/sql"
+	"github.com/rautaruukkipalich/migrator/resources"
 )
 
+type Broker interface {
+	SendMessages(ctx context.Context, ch chan database.Row, tablename string) error
+	Close()
+}
+
+type Database interface {
+	GetRows(ctx context.Context, query string) (chan database.Row, error)
+	Close()
+}
+
 type migrator struct {
-	database  *sqlx.DB
-	broker    *kafka.Writer
-	batchSize int32
+	database Database
+	broker   Broker
 }
 
 type Migrator interface {
@@ -20,33 +31,33 @@ type Migrator interface {
 }
 
 func New(
-	cfgDB *config.DatabaseConfig,
-	cfgKafka *config.KafkaConfig,
-	batchSize int32,
+	cfg *config.Config,
 ) (Migrator, error) {
 
-	database, err := newDatabase(cfgDB)
+	db, err := sql_database.NewDatabase(cfg)
 	if err != nil {
 		return nil, err
 	}
-	broker := newBroker(cfgKafka)
+	broker, err := kafka_broker.NewBroker(cfg)
+	if err != nil {
+		return nil, err
+	}
 
-	if batchSize == 0 {
-		batchSize = 10000
+	if cfg.BatchSize == 0 {
+		cfg.BatchSize = 10000
 	}
 
 	return &migrator{
-		database:  database,
-		broker:    broker,
-		batchSize: batchSize,
+		database: db,
+		broker:   broker,
 	}, nil
 }
 
-func (m *migrator) Migrate(table string) error {
-	if err := validateTable(table); err != nil {
+func (m *migrator) Migrate(tablename string) error {
+	if err := validateTableName(tablename); err != nil {
 		return err
 	}
-	return m.MigrateTable(table)
+	return m.MigrateTable(tablename)
 }
 
 func (m *migrator) Close() {
@@ -54,14 +65,25 @@ func (m *migrator) Close() {
 	m.database.Close()
 }
 
-func validateTable(table string) error {
-	if len(strings.Split(table, " ")) != 1 ||
-		strings.Contains(table, "drop ") ||
-		strings.Contains(table, " ") ||
-		strings.Contains(table, ";") ||
-		strings.Contains(table, ",") ||
-		strings.Contains(table, ".") {
-		return ErrInvalidTablename
+func (m *migrator) MigrateTable(tablename string) error {
+
+	selectQuery := resources.QuerySelect
+
+	if err := validateSelectQuery(selectQuery); err != nil {
+		return err
 	}
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	ch, err := m.database.GetRows(ctx, selectQuery)
+	if err != nil {
+		return err
+	}
+
+	if err := m.broker.SendMessages(ctx, ch, tablename); err != nil {
+		return err
+	}
+
 	return nil
 }

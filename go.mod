@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.15.11 // indirect
@@ -19,11 +20,14 @@ require (
 )
 
 require (
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.10.9 // indirect
+	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/segmentio/kafka-go v0.4.47
+	github.com/stretchr/testify v1.9.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 )

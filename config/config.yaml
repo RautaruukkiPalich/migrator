@@ -1,14 +1,10 @@
 database: 
   driver: "postgres"
-  user: "postgres"
-  password: "postgres"
-  host: "localhost"
-  port: 5441
-  db_name: "donor"
+  db_uri: "postgres://postgres:postgres@localhost:5441/donor?sslmode=disable"
 kafka:
-  host: "localhost"
-  port: 29092
+  broker_uri: "localhost:29092"
+  topic: "migrator"
 batch_size: 10000
-tables: ["test", "donor", "interceptor", "server", "drop table users", "users;drop table users; users"]
-migration_path: "./migrations"
-test_count_rows: 25000
+output_tablename: "new_donor"
+# migration_path: "./migrations"
+# test_count_rows: 25000

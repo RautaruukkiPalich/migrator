@@ -13,4 +13,5 @@ migrate:
 lint:
 	golangci-lint run ./...
 
-test: migrate run
+filldb:
+	go run ./cmd/filldb --config=./config/config.yaml

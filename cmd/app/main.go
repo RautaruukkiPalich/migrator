@@ -10,23 +10,17 @@ import (
 func main() {
 	cfg := confighelper.MustLoadConfig()
 
-	m, err := migrator.New(
-		&cfg.Database,
-		&cfg.Kafka, 
-		cfg.BatchSize,
-	)
+	m, err := migrator.New(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create migrator: %v\n", err)
 	}
 	defer m.Close()
 
-	for _, table := range cfg.Tables {
-		err = m.Migrate(table)
-		if err != nil {
-			log.Printf("Failed to migrate table `%s`: %v\n", table, err)
-		} else {
-			log.Printf("Successful migrated table `%s`", table)
-		}
+	err = m.Migrate(cfg.OutputTablename)
+	if err != nil {
+		log.Printf("Failed to migrate table `%s`: %v\n", cfg.OutputTablename, err)
+	} else {
+		log.Printf("Successful migrated table `%s`", cfg.OutputTablename)
 	}
 
 	log.Print("and its gone")
