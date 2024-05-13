@@ -33,6 +33,10 @@ type Migrator interface {
 func New(
 	cfg *config.Config,
 ) (Migrator, error) {
+	
+	if cfg.BatchSize == 0 {
+		cfg.BatchSize = 10000
+	}
 
 	db, err := sql_database.NewDatabase(cfg)
 	if err != nil {
@@ -41,10 +45,6 @@ func New(
 	broker, err := kafka_broker.NewBroker(cfg)
 	if err != nil {
 		return nil, err
-	}
-
-	if cfg.BatchSize == 0 {
-		cfg.BatchSize = 10000
 	}
 
 	return &migrator{

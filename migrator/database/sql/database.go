@@ -3,6 +3,8 @@ package sql
 import (
 	"context"
 	_ "embed"
+	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rautaruukkipalich/migrator/config"
@@ -28,6 +30,8 @@ func (db *Database) Close() {
 
 func (db *Database) GetRows(ctx context.Context, selectQuery string) (chan database.Row, error) {
 
+	selectQuery = db.TrimSpaces(selectQuery)
+
 	rows, err := db.conn.Queryx(selectQuery)
 	if err != nil {
 		return nil, database.ErrGetRows
@@ -42,11 +46,14 @@ func (db *Database) GetRows(ctx context.Context, selectQuery string) (chan datab
 		for rows.Next() {
 			rowMap := make(map[string]any)
 			err := rows.MapScan(rowMap)
+			if err != nil {
+				err = database.ErrGetRows
+			}
 	
 			select {
 			case ch <- database.Row{
 				Row: rowMap,
-				Err: database.ErrParseRow,
+				Err: err,
 			}: if err != nil {
 				return
 			}
@@ -57,4 +64,20 @@ func (db *Database) GetRows(ctx context.Context, selectQuery string) (chan datab
 	}(rows)
 
 	return ch, nil
+}
+
+func (db *Database) TrimSpaces(query string) string {
+	return strings.TrimSpace(query)
+}
+
+//если буду делить на несколько запросов чтоб избежать проблем со слишком большим количеством памяти для множества sql.Rows
+func (db *Database) GetCountRows(query string) int32 {
+	query = strings.TrimRight(query, ";")
+	query = fmt.Sprintf("select count(*) from (%s) as subquery;", query)
+
+	res := db.conn.QueryRowx(query)
+	dict := make(map[string]any)
+	res.MapScan(dict)
+
+	return int32(dict["count"].(int64))
 }
