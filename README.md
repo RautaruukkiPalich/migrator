@@ -7,6 +7,7 @@ database:
 kafka:
   broker_uri: "localhost:29092"
   topic: "migrator"
+ output_tablename: "new_donor" // in kafka every msg will have name like "new_donor_1..."
 batch_size: 10000
 ```
 
